@@ -1,0 +1,59 @@
+{
+  "name": "smaawa-dashboard",
+  "version": "2.0.0",
+  "description": "SMAAWA Water Monitoring Dashboard - Real-time IoT monitoring for water level, charge/discharge rate, and battery status",
+  "main": "index.html",
+  "scripts": {
+    "start": "python3 -m http.server 8080",
+    "serve": "python3 -m http.server 8080",
+    "serve:3000": "python3 -m http.server 3000",
+    "open": "open http://localhost:8080"
+  },
+  "keywords": [
+    "smaawa",
+    "water-monitoring",
+    "iot",
+    "dashboard",
+    "aws",
+    "react",
+    "real-time",
+    "monitoring"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/smaawa-dashboard.git"
+  },
+  "dependencies": {
+    "Note": "This project uses CDN resources, no npm install needed"
+  },
+  "devDependencies": {},
+  "cdnDependencies": {
+    "react": "18.x",
+    "react-dom": "18.x",
+    "recharts": "2.5.0",
+    "tailwindcss": "latest",
+    "babel-standalone": "latest",
+    "lucide": "latest"
+  },
+  "engines": {
+    "python": ">=3.6"
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  },
+  "config": {
+    "port": 8080,
+    "apiEndpoint": "https://imrnh5ugn0.execute-api.us-east-1.amazonaws.com/default/getData"
+  }
+}

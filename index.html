@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SMAAWA Water Monitoring Dashboard v2.0</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        /* Water-themed card styles */
+        .water-level-card {
+            background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+            color: white;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .rate-card {
+            background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+            color: white;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .water-level-card::before,
+        .rate-card::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+            animation: pulse 3s ease-in-out infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); opacity: 0.3; }
+            50% { transform: scale(1.1); opacity: 0.5; }
+        }
+        
+        .water-level-card .card-header,
+        .rate-card .card-header {
+            border-bottom: 1px solid rgba(255,255,255,0.2);
+            margin-bottom: 10px;
+        }
+        
+        .water-level-card .card-value,
+        .rate-card .card-value {
+            font-size: 3.5em;
+            font-weight: 900;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+            margin: 15px 0;
+        }
+        
+        .rate-status {
+            font-size: 1em;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin: 10px 0;
+        }
+        
+        /* Chart tabs styling */
+        .chart-btn {
+            background: white;
+            border: 2px solid #e5e7eb;
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s;
+            font-size: 0.9em;
+        }
+        
+        .chart-btn:hover {
+            background: #f3f4f6;
+            border-color: #3b82f6;
+        }
+        
+        .chart-btn.active {
+            background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+            color: white;
+            border-color: #3b82f6;
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+        }
+
+        /* Location form styling */
+        .location-form {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 5px;
+            color: #374151;
+        }
+
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #e5e7eb;
+            border-radius: 8px;
+            font-size: 1em;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #3b82f6;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+
+        .location-saved {
+            background: #ecfdf5;
+            border: 2px solid #10b981;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+        }
+
+        .map-readings {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .map-reading-card {
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .map-reading-label {
+            font-size: 0.9em;
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+
+        .map-reading-value {
+            font-size: 2em;
+            font-weight: 700;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="logo">
+                <span class="logo-icon">💧</span>
+                <h1>SMAAWA Water Monitoring</h1>
+            </div>
+            <div class="header-meta">
+                <span class="version">v2.0</span>
+                <span class="powered-by">Powered by AWS IoT Core</span>
+            </div>
+        </header>
+
+        <!-- Status Bar -->
+        <div class="status-bar">
+            <div class="status-item">
+                <span class="status-indicator" id="apiStatus"></span>
+                <div class="status-content">
+                    <div class="status-label">Connection</div>
+                    <div class="status-value" id="apiStatusText">Connecting...</div>
+                </div>
+            </div>
+            
+            <div class="status-item">
+                <div class="status-content">
+                    <div class="status-label">Last Update</div>
+                    <div class="status-value" id="lastUpdate">--:--:--</div>
+                </div>
+            </div>
+            
+            <div class="status-item">
+                <div class="status-content">
+                    <div class="status-label">Active Device</div>
+                    <div class="status-value" id="deviceName">--</div>
+                </div>
+            </div>
+            
+            <div class="status-item">
+                <div class="status-content">
+                    <div class="status-label">Mode</div>
+                    <div class="status-value" id="deviceMode">
+                        <span class="mode-badge" id="modeBadge">Fixed</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="status-item">
+                <div class="status-content">
+                    <div class="status-label">Auto-Refresh</div>
+                    <div class="status-value refresh-counter" id="refreshCounter">10s</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab Navigation -->
+        <div class="tabs">
+            <button class="tab-btn active" onclick="switchTab('dashboard')">
+                📊 Dashboard
+            </button>
+            <button class="tab-btn" onclick="switchTab('fixed-map')">
+                📍 Fixed Location
+            </button>
+        </div>
+
+        <!-- Dashboard Tab Content -->
+        <div id="dashboard-tab" class="tab-content active">
+            <!-- Controls -->
+            <div class="controls">
+                <div class="control-group">
+                    <label class="control-label">
+                        <span class="control-icon">📱</span>
+                        Select Device
+                        <select id="deviceSelect" class="device-select" onchange="changeDevice()">
+                            <option value="">Loading devices...</option>
+                        </select>
+                    </label>
+                </div>
+                
+                <div class="control-buttons">
+                    <button class="btn btn-primary" onclick="fetchData()">
+                        <span class="btn-icon">🔄</span>
+                        Refresh Now
+                    </button>
+                    <button class="btn btn-secondary" onclick="toggleAutoRefresh()" id="autoRefreshBtn">
+                        <span class="btn-icon">⏸️</span>
+                        Pause Auto-Refresh
+                    </button>
+                </div>
+            </div>
+
+            <!-- Device Statistics Summary -->
+            <div class="device-summary" id="deviceSummary">
+                <div class="summary-card">
+                    <div class="summary-icon">📊</div>
+                    <div class="summary-content">
+                        <div class="summary-value" id="totalDevices">--</div>
+                        <div class="summary-label">Total Devices</div>
+                    </div>
+                </div>
+                <div class="summary-card online">
+                    <div class="summary-icon">✅</div>
+                    <div class="summary-content">
+                        <div class="summary-value" id="onlineDevices">--</div>
+                        <div class="summary-label">Online</div>
+                    </div>
+                </div>
+                <div class="summary-card offline">
+                    <div class="summary-icon">⚠️</div>
+                    <div class="summary-content">
+                        <div class="summary-value" id="offlineDevices">--</div>
+                        <div class="summary-label">Offline</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sensor Cards Grid -->
+            <div class="grid">
+                <!-- Water Level Card -->
+                <div class="card water-level-card">
+                    <div class="card-header">
+                        <span class="card-title">Water Level</span>
+                        <span class="card-icon">💧</span>
+                    </div>
+                    <div class="card-value" id="waterLevelValue">--</div>
+                    <div class="card-unit">cm</div>
+                    <span class="card-status" id="waterLevelStatus">Depth</span>
+                    <div style="margin-top: 10px; font-size: 0.85em; opacity: 0.9;">
+                        <div>Min Level (1h): <span id="minWaterLevel">--</span> cm</div>
+                        <div>Max Level (1h): <span id="maxWaterLevel">--</span> cm</div>
+                    </div>
+                </div>
+
+                <!-- Charge/Discharge Rate Card -->
+                <div class="card rate-card">
+                    <div class="card-header">
+                        <span class="card-title">Charge/Discharge Rate</span>
+                        <span class="card-icon">📈</span>
+                    </div>
+                    <div class="card-value" id="rateValue">--</div>
+                    <div class="card-unit">cm/hr</div>
+                    <span class="rate-status" id="rateStatus">Stable</span>
+                    <div style="margin-top: 10px; font-size: 0.85em; opacity: 0.9;">
+                        <div>Avg (1h): <span id="avgRateValue">--</span> cm/hr</div>
+                    </div>
+                </div>
+
+                <!-- Battery Card -->
+                <div class="card battery-card">
+                    <div class="card-header">
+                        <span class="card-title">Battery</span>
+                        <span class="card-icon">🔋</span>
+                    </div>
+                    <div class="card-value" id="batteryValue">--</div>
+                    <div class="card-unit">%</div>
+                    <div class="battery-indicator">
+                        <div class="battery-fill" id="batteryFill"></div>
+                    </div>
+                </div>
+                
+                <!-- System Health Card -->
+                <div class="card" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important; color: white;">
+                    <div class="card-header" style="border-bottom: 1px solid rgba(255,255,255,0.2);">
+                        <span class="card-title" style="color: white;">System Health</span>
+                        <span class="card-icon" style="color: white;">💚</span>
+                    </div>
+                    <div style="margin-top: 15px; font-size: 0.9em; line-height: 1.8; color: white;">
+                        <div style="display: flex; justify-content: space-between;">
+                            <span>Data Points/Hr:</span>
+                            <strong id="dataPointsValue">--</strong>
+                        </div>
+                        <div style="display: flex; justify-content: space-between;">
+                            <span>Device Uptime:</span>
+                            <strong id="uptimeValue">--</strong>
+                        </div>
+                        <div style="display: flex; justify-content: space-between;">
+                            <span>Last Seen:</span>
+                            <strong id="lastSeenValue">--</strong>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Historical Chart -->
+            <div class="chart-container">
+                <div class="chart-header">
+                    <h2>Real-Time & Historical Hourly Data</h2>
+                    <div class="chart-controls">
+                        <button class="chart-btn active" onclick="updateChartRange('realtime', 3)">Real-Time</button>
+                        <button class="chart-btn" onclick="updateChartRange('hourly', 1)">1H</button>
+                        <button class="chart-btn" onclick="updateChartRange('hourly', 6)">6H</button>
+                        <button class="chart-btn" onclick="updateChartRange('hourly', 24)">24H</button>
+                        <button class="chart-btn" onclick="updateChartRange('hourly', 48)">48H</button>
+                        <button class="chart-btn" onclick="updateChartRange('hourly', 168)">Week</button>
+                        <button class="chart-btn" onclick="updateChartRange('hourly', 720)">Month</button>
+                    </div>
+                </div>
+    
+                <!-- Water Level Chart - Full Width Row 1 -->
+                <div style="width: 100%; margin-bottom: 40px;">
+                    <div style="height: 400px;">
+                        <canvas id="waterLevelChart"></canvas>
+                    </div>
+                </div>
+                
+                <!-- Rate Chart - Full Width Row 2 -->
+                <div style="width: 100%;">
+                    <div style="height: 400px;">
+                        <canvas id="rateChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Fixed Location Map Tab -->
+        <div id="fixed-map-tab" class="tab-content">
+            <!-- Location Form -->
+            <div class="location-form">
+                <h3 style="margin-bottom: 20px; color: #1f2937;">Set Device Location</h3>
+                
+                <div class="form-group">
+                    <label>Device</label>
+                    <select id="locationDeviceSelect" onchange="loadDeviceLocation()">
+                        <option value="">Select Device</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Location Name (Optional)</label>
+                    <input type="text" id="locationName" placeholder="e.g., Main Reservoir, Cistern A">
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Latitude</label>
+                        <input type="number" step="any" id="latitude" placeholder="19.4326">
+                    </div>
+                    <div class="form-group">
+                        <label>Longitude</label>
+                        <input type="number" step="any" id="longitude" placeholder="-99.1332">
+                    </div>
+                </div>
+
+                <button class="btn btn-primary" onclick="saveDeviceLocation()" style="width: 100%; margin-top: 10px;">
+                    <span class="btn-icon">💾</span>
+                    Save Location
+                </button>
+
+                <div id="locationSaved" class="location-saved" style="display: none;">
+                    <h4 style="color: #047857; margin-bottom: 10px;">✓ Current Saved Location:</h4>
+                    <div style="color: #065f46;">
+                        <div><strong>Name:</strong> <span id="savedLocationName">--</span></div>
+                        <div><strong>Latitude:</strong> <span id="savedLat">--</span></div>
+                        <div><strong>Longitude:</strong> <span id="savedLng">--</span></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Map Display -->
+            <div id="mapSection" style="display: none;">
+                <h3 style="margin-bottom: 15px; color: #1f2937;">Device Location Map</h3>
+                
+                <div id="fixedMap" class="map-view" style="height: 500px; border-radius: 12px; overflow: hidden; margin-bottom: 20px;"></div>
+
+                <!-- Device Readings on Map -->
+                <div class="map-readings">
+                    <div class="map-reading-card" style="background: #dbeafe; border: 2px solid #3b82f6;">
+                        <div class="map-reading-label" style="color: #1e40af;">Water Level</div>
+                        <div class="map-reading-value" style="color: #1e3a8a;">
+                            <span id="mapWaterLevel">0</span> <span style="font-size: 0.6em;">cm</span>
+                        </div>
+                    </div>
+                    <div class="map-reading-card" style="background: #ffedd5; border: 2px solid #f97316;">
+                        <div class="map-reading-label" style="color: #c2410c;">Charge/Discharge Rate</div>
+                        <div class="map-reading-value" style="color: #9a3412;">
+                            <span id="mapRate">0</span> <span style="font-size: 0.6em;">cm/hr</span>
+                        </div>
+                    </div>
+                    <div class="map-reading-card" style="background: #d1fae5; border: 2px solid #10b981;">
+                        <div class="map-reading-label" style="color: #047857;">Battery</div>
+                        <div class="map-reading-value" style="color: #065f46;">
+                            <span id="mapBattery">0</span> <span style="font-size: 0.6em;">%</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <div class="footer-content">
+                <p>&copy; 2025 SMAAWA Water Monitoring System v2.0</p>
+                <p class="footer-links">
+                    <a href="#" onclick="showAbout()">About</a>
+                    <span>•</span>
+                    <a href="#" onclick="showHelp()">Help</a>
+                    <span>•</span>
+                    <a href="#" onclick="exportData()">Export Data</a>
+                </p>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="spinner"></div>
+        <p>Loading dashboard...</p>
+    </div>
+
+    <script src="config.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
